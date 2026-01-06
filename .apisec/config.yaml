@@ -1,0 +1,17 @@
+version: '1.0'
+api_name: Sample Orders Api
+base_url: http://localhost:8000
+spec_path: docs/openapi.yaml
+auth:
+  type: bearer
+  credentials:
+    source: env
+    token_var: APISEC_BEARER_TOKEN
+security_tests:
+  enabled: true
+  test_types:
+  - bola
+  - auth_bypass
+  - injection
+  - schema_validation
+endpoints_discovered: 10
