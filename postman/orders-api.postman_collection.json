@@ -1,0 +1,649 @@
+{
+	"info": {
+		"_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+		"name": "Sample Orders API",
+		"description": "A sample e-commerce Orders API for demonstrating API security testing.\n\n## Setup\n\n1. Import this collection into Postman\n2. Create an environment with:\n   - `base_url`: `http://localhost:8000`\n   - `username`: Your test username\n   - `password`: Your test password\n3. The collection will automatically fetch a token when needed\n\n## Authentication\n\nThe collection uses Bearer token authentication. Tokens are automatically fetched via the pre-request script when `access_token` is not set or has expired.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{access_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Pre-request script to automatically fetch token if needed",
+					"",
+					"const tokenExpiry = pm.environment.get('token_expiry');",
+					"const accessToken = pm.environment.get('access_token');",
+					"const currentTime = Date.now();",
+					"",
+					"// Skip token fetch for the token endpoint itself",
+					"if (pm.request.url.path && pm.request.url.path.join('/').includes('auth/token')) {",
+					"    console.log('Skipping token fetch for auth endpoint');",
+					"    return;",
+					"}",
+					"",
+					"// Check if token exists and is not expired (with 60s buffer)",
+					"if (accessToken && tokenExpiry && currentTime < (tokenExpiry - 60000)) {",
+					"    console.log('Using existing token');",
+					"    return;",
+					"}",
+					"",
+					"console.log('Fetching new access token...');",
+					"",
+					"const baseUrl = pm.environment.get('base_url') || 'http://localhost:8000';",
+					"const username = pm.environment.get('username');",
+					"const password = pm.environment.get('password');",
+					"const clientId = pm.environment.get('client_id');",
+					"const clientSecret = pm.environment.get('client_secret');",
+					"",
+					"let requestBody;",
+					"",
+					"// Prefer client credentials if available, otherwise use password grant",
+					"if (clientId && clientSecret) {",
+					"    requestBody = {",
+					"        grant_type: 'client_credentials',",
+					"        client_id: clientId,",
+					"        client_secret: clientSecret",
+					"    };",
+					"} else if (username && password) {",
+					"    requestBody = {",
+					"        grant_type: 'password',",
+					"        username: username,",
+					"        password: password",
+					"    };",
+					"} else {",
+					"    console.warn('No credentials configured. Set username/password or client_id/client_secret in environment.');",
+					"    return;",
+					"}",
+					"",
+					"pm.sendRequest({",
+					"    url: baseUrl + '/auth/token',",
+					"    method: 'POST',",
+					"    header: {",
+					"        'Content-Type': 'application/json'",
+					"    },",
+					"    body: {",
+					"        mode: 'raw',",
+					"        raw: JSON.stringify(requestBody)",
+					"    }",
+					"}, function (err, response) {",
+					"    if (err) {",
+					"        console.error('Failed to fetch token:', err);",
+					"        return;",
+					"    }",
+					"    ",
+					"    if (response.code === 200) {",
+					"        const jsonResponse = response.json();",
+					"        pm.environment.set('access_token', jsonResponse.access_token);",
+					"        // Set expiry time (expires_in is in seconds)",
+					"        const expiryTime = currentTime + (jsonResponse.expires_in * 1000);",
+					"        pm.environment.set('token_expiry', expiryTime);",
+					"        console.log('Token fetched successfully');",
+					"    } else {",
+					"        console.error('Token request failed:', response.code, response.text());",
+					"    }",
+					"});"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Global test script",
+					"pm.test('Response time is acceptable', function () {",
+					"    pm.expect(pm.response.responseTime).to.be.below(5000);",
+					"});"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Auth",
+			"description": "Authentication endpoints for obtaining access tokens",
+			"item": [
+				{
+					"name": "Get Token (Password Grant)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response has access_token', function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('access_token');",
+									"    pm.expect(jsonData).to.have.property('token_type', 'bearer');",
+									"    pm.expect(jsonData).to.have.property('expires_in');",
+									"});",
+									"",
+									"// Store token for subsequent requests",
+									"if (pm.response.code === 200) {",
+									"    const jsonData = pm.response.json();",
+									"    pm.environment.set('access_token', jsonData.access_token);",
+									"    const expiryTime = Date.now() + (jsonData.expires_in * 1000);",
+									"    pm.environment.set('token_expiry', expiryTime);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"grant_type\": \"password\",\n    \"username\": \"{{username}}\",\n    \"password\": \"{{password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/token",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"token"
+							]
+						},
+						"description": "Obtain an access token using username and password (password grant)."
+					}
+				},
+				{
+					"name": "Get Token (Client Credentials)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response has access_token', function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('access_token');",
+									"    pm.expect(jsonData).to.have.property('token_type', 'bearer');",
+									"});",
+									"",
+									"// Store token for subsequent requests",
+									"if (pm.response.code === 200) {",
+									"    const jsonData = pm.response.json();",
+									"    pm.environment.set('access_token', jsonData.access_token);",
+									"    const expiryTime = Date.now() + (jsonData.expires_in * 1000);",
+									"    pm.environment.set('token_expiry', expiryTime);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"grant_type\": \"client_credentials\",\n    \"client_id\": \"{{client_id}}\",\n    \"client_secret\": \"{{client_secret}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/token",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"token"
+							]
+						},
+						"description": "Obtain an access token using client credentials (service account)."
+					}
+				}
+			]
+		},
+		{
+			"name": "Orders",
+			"description": "Order management endpoints",
+			"item": [
+				{
+					"name": "List Orders",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response is an array', function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});",
+									"",
+									"pm.test('Orders have required fields', function () {",
+									"    const jsonData = pm.response.json();",
+									"    if (jsonData.length > 0) {",
+									"        pm.expect(jsonData[0]).to.have.property('order_id');",
+									"        pm.expect(jsonData[0]).to.have.property('user_id');",
+									"        pm.expect(jsonData[0]).to.have.property('product_name');",
+									"        pm.expect(jsonData[0]).to.have.property('price');",
+									"        pm.expect(jsonData[0]).to.have.property('status');",
+									"    }",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/orders",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"orders"
+							]
+						},
+						"description": "List all orders. Regular users see only their own orders; admins see all orders."
+					}
+				},
+				{
+					"name": "Get Order",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status code is 200 or 403 or 404', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 403, 404]);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"    pm.test('Order has required fields', function () {",
+									"        const jsonData = pm.response.json();",
+									"        pm.expect(jsonData).to.have.property('order_id');",
+									"        pm.expect(jsonData).to.have.property('user_id');",
+									"        pm.expect(jsonData).to.have.property('product_name');",
+									"        pm.expect(jsonData).to.have.property('price');",
+									"        pm.expect(jsonData).to.have.property('status');",
+									"    });",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/orders/{{order_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"orders",
+								"{{order_id}}"
+							]
+						},
+						"description": "Get a single order by ID. Users can only access their own orders; admins can access any order."
+					}
+				},
+				{
+					"name": "Create Order",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status code is 201', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test('Created order has required fields', function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('order_id');",
+									"    pm.expect(jsonData).to.have.property('user_id');",
+									"    pm.expect(jsonData).to.have.property('product_name');",
+									"    pm.expect(jsonData).to.have.property('price');",
+									"    pm.expect(jsonData).to.have.property('status');",
+									"    pm.expect(jsonData).to.have.property('created_at');",
+									"});",
+									"",
+									"// Store created order ID for subsequent requests",
+									"if (pm.response.code === 201) {",
+									"    const jsonData = pm.response.json();",
+									"    pm.environment.set('created_order_id', jsonData.order_id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"product_name\": \"Test Product\",\n    \"price\": 49.99,\n    \"status\": \"pending\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/orders",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"orders"
+							]
+						},
+						"description": "Create a new order. The order will be associated with the authenticated user."
+					}
+				},
+				{
+					"name": "Update Order",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status code is 200 or 403 or 404', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 403, 404]);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"    pm.test('Updated order reflects changes', function () {",
+									"        const jsonData = pm.response.json();",
+									"        pm.expect(jsonData).to.have.property('status', 'shipped');",
+									"    });",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"status\": \"shipped\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/orders/{{order_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"orders",
+								"{{order_id}}"
+							]
+						},
+						"description": "Update an existing order. Users can only update their own orders; admins can update any order."
+					}
+				},
+				{
+					"name": "Delete Order",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status code is 204 or 403 or 404', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([204, 403, 404]);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/orders/{{order_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"orders",
+								"{{order_id}}"
+							]
+						},
+						"description": "Delete an order. Users can only delete their own orders; admins can delete any order."
+					}
+				}
+			]
+		},
+		{
+			"name": "Users",
+			"description": "User profile management endpoints",
+			"item": [
+				{
+					"name": "Get Profile",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status code is 200 or 403 or 404', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 403, 404]);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"    pm.test('Profile has required fields', function () {",
+									"        const jsonData = pm.response.json();",
+									"        pm.expect(jsonData).to.have.property('user_id');",
+									"        pm.expect(jsonData).to.have.property('email');",
+									"        pm.expect(jsonData).to.have.property('full_name');",
+									"    });",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users/{{user_id}}/profile",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"{{user_id}}",
+								"profile"
+							]
+						},
+						"description": "Get a user's profile. Users can only access their own profile; admins can access any profile."
+					}
+				},
+				{
+					"name": "Update Profile",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status code is 200 or 403 or 404', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 403, 404]);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"    pm.test('Profile was updated', function () {",
+									"        const jsonData = pm.response.json();",
+									"        pm.expect(jsonData).to.have.property('user_id');",
+									"        pm.expect(jsonData).to.have.property('email');",
+									"    });",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"updated@example.com\",\n    \"phone\": \"+1-555-1234\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/users/{{user_id}}/profile",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"{{user_id}}",
+								"profile"
+							]
+						},
+						"description": "Update a user's profile. Users can only update their own profile; admins can update any profile."
+					}
+				}
+			]
+		},
+		{
+			"name": "Health",
+			"description": "Health check endpoints",
+			"item": [
+				{
+					"name": "Root",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Service is healthy', function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('status', 'healthy');",
+									"    pm.expect(jsonData).to.have.property('service', 'sample-orders-api');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								""
+							]
+						},
+						"description": "Root endpoint returning service status."
+					}
+				},
+				{
+					"name": "Health Check",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Health status is healthy', function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('status', 'healthy');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Health check endpoint."
+					}
+				}
+			]
+		}
+	]
+}
