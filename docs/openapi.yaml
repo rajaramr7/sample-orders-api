@@ -1,0 +1,672 @@
+openapi: 3.0.3
+info:
+  title: Sample Orders API
+  description: |
+    A sample e-commerce Orders API for demonstrating API security testing.
+
+    ## Authentication
+    This API uses JWT Bearer token authentication. Obtain a token via the `/auth/token` endpoint
+    using either password grant (for users) or client_credentials grant (for service accounts).
+
+    ## Authorization
+    - Regular users can only access their own orders and profile
+    - Admin users can access all orders and profiles
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+
+tags:
+  - name: Authentication
+    description: Token management endpoints
+  - name: Orders
+    description: Order management endpoints
+  - name: Users
+    description: User profile endpoints
+  - name: Health
+    description: Health check endpoints
+
+paths:
+  /:
+    get:
+      tags:
+        - Health
+      summary: Root endpoint
+      description: Returns service status information
+      operationId: root
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceStatus'
+              example:
+                status: healthy
+                service: sample-orders-api
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Returns health status of the service
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+              example:
+                status: healthy
+
+  /auth/token:
+    post:
+      tags:
+        - Authentication
+      summary: Get access token
+      description: |
+        Obtain a JWT access token using OAuth2 password or client_credentials grant.
+
+        **Password Grant**: Use for end-user authentication with username/password.
+
+        **Client Credentials Grant**: Use for service-to-service authentication.
+      operationId: getToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+            examples:
+              passwordGrant:
+                summary: Password grant example
+                value:
+                  grant_type: password
+                  username: your_username
+                  password: your_password
+              clientCredentials:
+                summary: Client credentials grant example
+                value:
+                  grant_type: client_credentials
+                  client_id: your_client_id
+                  client_secret: your_client_secret
+      responses:
+        '200':
+          description: Token generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+              example:
+                access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                token_type: bearer
+                expires_in: 1800
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                detail: Username and password required for password grant
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                detail: Invalid username or password
+
+  /orders:
+    get:
+      tags:
+        - Orders
+      summary: List orders
+      description: |
+        Retrieve a list of orders.
+
+        - Regular users see only their own orders
+        - Admin users see all orders
+      operationId: listOrders
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+              example:
+                - order_id: 1001
+                  user_id: user123
+                  product_name: Widget Pro
+                  price: 99.99
+                  status: shipped
+                  created_at: "2024-01-15T10:30:00Z"
+                - order_id: 1002
+                  user_id: user123
+                  product_name: Gadget Plus
+                  price: 149.99
+                  status: pending
+                  created_at: "2024-01-16T14:20:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Orders
+      summary: Create order
+      description: Create a new order. The order will be associated with the authenticated user.
+      operationId: createOrder
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreate'
+            example:
+              product_name: New Product
+              price: 79.99
+              status: pending
+      responses:
+        '201':
+          description: Order created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+              example:
+                order_id: 3001
+                user_id: user123
+                product_name: New Product
+                price: 79.99
+                status: pending
+                created_at: "2024-01-20T09:00:00Z"
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /orders/{order_id}:
+    parameters:
+      - name: order_id
+        in: path
+        required: true
+        description: Unique identifier of the order
+        schema:
+          type: integer
+        example: 1001
+
+    get:
+      tags:
+        - Orders
+      summary: Get order
+      description: |
+        Retrieve a single order by ID.
+
+        - Regular users can only access their own orders
+        - Admin users can access any order
+      operationId: getOrder
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Order details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+              example:
+                order_id: 1001
+                user_id: user123
+                product_name: Widget Pro
+                price: 99.99
+                status: shipped
+                created_at: "2024-01-15T10:30:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Orders
+      summary: Update order
+      description: |
+        Update an existing order.
+
+        - Regular users can only update their own orders
+        - Admin users can update any order
+      operationId: updateOrder
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderUpdate'
+            example:
+              status: shipped
+      responses:
+        '200':
+          description: Order updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+              example:
+                order_id: 1001
+                user_id: user123
+                product_name: Widget Pro
+                price: 99.99
+                status: shipped
+                created_at: "2024-01-15T10:30:00Z"
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Orders
+      summary: Delete order
+      description: |
+        Delete an order.
+
+        - Regular users can only delete their own orders
+        - Admin users can delete any order
+      operationId: deleteOrder
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Order deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /users/{user_id}/profile:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        description: Unique identifier of the user
+        schema:
+          type: string
+        example: user123
+
+    get:
+      tags:
+        - Users
+      summary: Get user profile
+      description: |
+        Retrieve a user's profile.
+
+        - Regular users can only access their own profile
+        - Admin users can access any profile
+      operationId: getProfile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+              example:
+                user_id: user123
+                email: user@example.com
+                full_name: John Doe
+                phone: "+1-555-0123"
+                address: "123 Main St, Anytown, USA"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Users
+      summary: Update user profile
+      description: |
+        Update a user's profile.
+
+        - Regular users can only update their own profile
+        - Admin users can update any profile
+      operationId: updateProfile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdate'
+            example:
+              email: newemail@example.com
+              phone: "+1-555-9999"
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+              example:
+                user_id: user123
+                email: newemail@example.com
+                full_name: John Doe
+                phone: "+1-555-9999"
+                address: "123 Main St, Anytown, USA"
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token obtained from the `/auth/token` endpoint.
+
+        Token payload contains:
+        - `sub`: User ID
+        - `role`: User role (user or admin)
+        - `exp`: Token expiration timestamp
+
+  schemas:
+    ServiceStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Service status
+        service:
+          type: string
+          description: Service name
+      required:
+        - status
+        - service
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Health status
+      required:
+        - status
+
+    TokenRequest:
+      type: object
+      properties:
+        grant_type:
+          type: string
+          enum:
+            - password
+            - client_credentials
+          description: OAuth2 grant type
+        username:
+          type: string
+          description: Username (required for password grant)
+        password:
+          type: string
+          format: password
+          description: Password (required for password grant)
+        client_id:
+          type: string
+          description: Client ID (required for client_credentials grant)
+        client_secret:
+          type: string
+          format: password
+          description: Client secret (required for client_credentials grant)
+      required:
+        - grant_type
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT access token
+        token_type:
+          type: string
+          default: bearer
+          description: Token type (always "bearer")
+        expires_in:
+          type: integer
+          default: 1800
+          description: Token validity in seconds
+      required:
+        - access_token
+        - token_type
+        - expires_in
+
+    Order:
+      type: object
+      properties:
+        order_id:
+          type: integer
+          description: Unique order identifier
+        user_id:
+          type: string
+          description: ID of the user who owns the order
+        product_name:
+          type: string
+          description: Name of the ordered product
+        price:
+          type: number
+          format: double
+          description: Order price
+        status:
+          type: string
+          enum:
+            - pending
+            - shipped
+            - delivered
+          description: Order status
+        created_at:
+          type: string
+          format: date-time
+          description: Order creation timestamp
+      required:
+        - order_id
+        - user_id
+        - product_name
+        - price
+        - status
+        - created_at
+
+    OrderCreate:
+      type: object
+      properties:
+        product_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Name of the product to order
+        price:
+          type: number
+          format: double
+          minimum: 0.01
+          description: Order price (must be positive)
+        status:
+          type: string
+          enum:
+            - pending
+            - shipped
+            - delivered
+          default: pending
+          description: Initial order status
+      required:
+        - product_name
+        - price
+
+    OrderUpdate:
+      type: object
+      properties:
+        product_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Updated product name
+        price:
+          type: number
+          format: double
+          minimum: 0.01
+          description: Updated price
+        status:
+          type: string
+          enum:
+            - pending
+            - shipped
+            - delivered
+          description: Updated order status
+
+    Profile:
+      type: object
+      properties:
+        user_id:
+          type: string
+          description: Unique user identifier
+        email:
+          type: string
+          format: email
+          description: User's email address
+        full_name:
+          type: string
+          description: User's full name
+        phone:
+          type: string
+          description: User's phone number
+        address:
+          type: string
+          description: User's address
+      required:
+        - user_id
+        - email
+        - full_name
+
+    ProfileUpdate:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: Updated email address
+        full_name:
+          type: string
+          description: Updated full name
+        phone:
+          type: string
+          description: Updated phone number
+        address:
+          type: string
+          description: Updated address
+
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Error message
+      required:
+        - detail
+
+    ValidationError:
+      type: object
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            properties:
+              loc:
+                type: array
+                items:
+                  oneOf:
+                    - type: string
+                    - type: integer
+                description: Location of the error
+              msg:
+                type: string
+                description: Error message
+              type:
+                type: string
+                description: Error type
+
+  responses:
+    Unauthorized:
+      description: Authentication required or token invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            detail: Invalid token
+
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            detail: Not authorized to access this resource
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            detail: Resource not found
