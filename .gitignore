@@ -40,5 +40,6 @@ Thumbs.db
 .env
 .env.local
 
-# Logs
+# Logs (except sample logs directory)
 *.log
+!logs/*.log
